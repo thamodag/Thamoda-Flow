@@ -17,6 +17,7 @@ interface GalleryViewProps {
 
 const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, onReusePrompt, onFavorite, onNew, gridSize = 'medium' }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [downloadDropdownId, setDownloadDropdownId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -239,59 +240,82 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
                       <FilmIcon className="w-4 h-4" />
                     </button>
                   )}
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleExport(asset, isVideo ? '720p' : '1K'); }}
-                    className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-emerald-500 transition-all opacity-0 group-hover:opacity-100 duration-300 translate-x-4 group-hover:translate-x-0 delay-[200ms]"
-                    title="Quick Download"
-                  >
-                    <DownloadIcon className="w-4 h-4" />
-                  </button>
                 </div>
 
                 {/* Simplified Action Area with Hover Bridge */}
                 {asset.status === 'ready' && (
                   <div className="absolute inset-x-0 bottom-0 h-1/2 flex flex-col justify-end z-40 pointer-events-none">
-                    <div className="download-buttons-container w-full px-6 pb-6 pointer-events-auto translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-out">
+                    <div className={`download-buttons-container w-full px-6 pb-6 pointer-events-auto transition-all duration-300 ease-out ${downloadDropdownId === asset.id ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100'}`}>
                         <div className="flex flex-col gap-2">
                             <div className="flex gap-2">
-                              <div className="flex-1 flex gap-1 bg-white p-1 rounded-2xl shadow-xl">
-                                {isVideo ? (
-                                  <>
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); handleExport(asset, '720p'); }}
-                                      className="flex-1 h-10 rounded-xl flex items-center justify-center transition-all font-bold text-[9px] uppercase tracking-widest text-black hover:bg-gray-100 active:scale-95"
-                                    >
-                                      720P
-                                    </button>
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); handleExport(asset, '1080p'); }}
-                                      className="flex-1 h-10 rounded-xl flex items-center justify-center transition-all font-bold text-[9px] uppercase tracking-widest text-black hover:bg-gray-100 active:scale-95 border-l border-gray-100"
-                                    >
-                                      1080P
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); handleExport(asset, '1K'); }}
-                                      className="flex-1 h-10 rounded-xl flex items-center justify-center transition-all font-bold text-[9px] uppercase tracking-widest text-black hover:bg-gray-100 active:scale-95"
-                                    >
-                                      1K
-                                    </button>
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); handleExport(asset, '2K'); }}
-                                      className="flex-1 h-10 rounded-xl flex items-center justify-center transition-all font-bold text-[9px] uppercase tracking-widest text-black hover:bg-gray-100 active:scale-95 border-l border-gray-100"
-                                    >
-                                      2K
-                                    </button>
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); handleExport(asset, '4K'); }}
-                                      className="flex-1 h-10 rounded-xl flex items-center justify-center transition-all font-bold text-[9px] uppercase tracking-widest text-black hover:bg-gray-100 active:scale-95 border-l border-gray-100"
-                                    >
-                                      4K
-                                    </button>
-                                  </>
-                                )}
+                              <div className="relative flex-1">
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setDownloadDropdownId(downloadDropdownId === asset.id ? null : asset.id); 
+                                  }}
+                                  className={`w-full h-12 rounded-2xl flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-[0.15em] shadow-xl active:scale-95 ${downloadDropdownId === asset.id ? 'bg-emerald-600 text-white' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
+                                >
+                                  <DownloadIcon className="w-4 h-4" />
+                                  Download
+                                </button>
+
+                                <AnimatePresence>
+                                  {downloadDropdownId === asset.id && (
+                                    <>
+                                      {/* Click outside overlay */}
+                                      <div 
+                                        className="fixed inset-0 z-[55]" 
+                                        onClick={(e) => { e.stopPropagation(); setDownloadDropdownId(null); }}
+                                      />
+                                      <motion.div
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        className="absolute bottom-full left-0 right-0 mb-3 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden z-[60] border border-gray-100 p-1.5 flex flex-col gap-1"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {isVideo ? (
+                                          <>
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); handleExport(asset, '720p'); setDownloadDropdownId(null); }}
+                                              className="w-full h-11 rounded-xl flex items-center px-4 transition-all font-bold text-[10px] uppercase tracking-widest text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                                            >
+                                              Download 720P
+                                            </button>
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); handleExport(asset, '1080p'); setDownloadDropdownId(null); }}
+                                              className="w-full h-11 rounded-xl flex items-center px-4 transition-all font-bold text-[10px] uppercase tracking-widest text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                                            >
+                                              Download 1080P
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); handleExport(asset, '1K'); setDownloadDropdownId(null); }}
+                                              className="w-full h-11 rounded-xl flex items-center px-4 transition-all font-bold text-[10px] uppercase tracking-widest text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                                            >
+                                              Download 1K
+                                            </button>
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); handleExport(asset, '2K'); setDownloadDropdownId(null); }}
+                                              className="w-full h-11 rounded-xl flex items-center px-4 transition-all font-bold text-[10px] uppercase tracking-widest text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                                            >
+                                              Download 2K
+                                            </button>
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); handleExport(asset, '4K'); setDownloadDropdownId(null); }}
+                                              className="w-full h-11 rounded-xl flex items-center px-4 transition-all font-bold text-[10px] uppercase tracking-widest text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                                            >
+                                              Download 4K
+                                            </button>
+                                          </>
+                                        )}
+                                      </motion.div>
+                                    </>
+                                  )}
+                                </AnimatePresence>
                               </div>
                               
                               <button 
