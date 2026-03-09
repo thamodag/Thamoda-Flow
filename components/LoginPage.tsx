@@ -26,12 +26,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (response.ok && data.user) {
         localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('userType', data.userType);
-        onLoginSuccess(data.userType);
+        localStorage.setItem('userType', data.user);
+        onLoginSuccess(data.user);
       } else {
-        setError(data.message || 'Incorrect password');
+        setError(data.error || 'Incorrect password');
       }
     } catch (err) {
       setError('Failed to connect to the server');

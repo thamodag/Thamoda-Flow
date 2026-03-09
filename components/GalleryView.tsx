@@ -2,12 +2,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StudioAsset, StudioModality, ImageSize, ImageModel, StudioModality as Modality, GenerateParams, AspectRatio } from '../types';
-import { DownloadIcon, FilmIcon, PlusIcon, SparklesIcon, XMarkIcon, ChevronDownIcon, ArrowPathIcon, RectangleStackIcon, HeartIcon } from './icons';
+import { DownloadIcon, FilmIcon, PlusIcon, SparklesIcon, XMarkIcon, ChevronDownIcon, ArrowPathIcon, RectangleStackIcon, HeartIcon, ClockIcon } from './icons';
 import { generateStudioContent } from '../services/geminiService';
 
 interface GalleryViewProps {
   assets: StudioAsset[];
   onPromote: (asset: StudioAsset) => void;
+  onAddToScene: (asset: StudioAsset) => void;
+  onExtend: (asset: StudioAsset) => void;
   onDelete?: (id: string) => void;
   onReusePrompt: (prompt: string) => void;
   onFavorite: (id: string) => void;
@@ -15,7 +17,7 @@ interface GalleryViewProps {
   gridSize?: 'small' | 'medium' | 'large';
 }
 
-const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, onReusePrompt, onFavorite, onNew, gridSize = 'medium' }) => {
+const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onAddToScene, onExtend, onDelete, onReusePrompt, onFavorite, onNew, gridSize = 'medium' }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -188,7 +190,9 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
                     <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30">
                         <div className="w-10 h-10 border-[3px] border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                         <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">
-                          {currentSize === '1K' ? 'Preparing download...' : `Upscaling to ${currentSize}...`}
+                          {currentSize === '1K' ? 'Preparing download...' : 
+                           asset.modality === StudioModality.MOTION ? (asset.duration ? 'Extending video...' : 'Generating video...') :
+                           `Upscaling to ${currentSize}...`}
                         </span>
                     </div>
                 )}
@@ -232,11 +236,20 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
                   </button>
                   {!isVideo && (
                     <button 
-                      onClick={(e) => { e.stopPropagation(); onPromote(asset); }}
+                      onClick={(e) => { e.stopPropagation(); onAddToScene(asset); }}
                       className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-indigo-500 transition-all opacity-0 group-hover:opacity-100 duration-300 translate-x-4 group-hover:translate-x-0 delay-[150ms]"
-                      title="Animate"
+                      title="Add to Scene"
                     >
-                      <FilmIcon className="w-4 h-4" />
+                      <PlusIcon className="w-4 h-4" />
+                    </button>
+                  )}
+                  {isVideo && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onExtend(asset); }}
+                      className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-indigo-500 transition-all opacity-0 group-hover:opacity-100 duration-300 translate-x-4 group-hover:translate-x-0 delay-[150ms]"
+                      title="Extend +8s"
+                    >
+                      <SparklesIcon className="w-4 h-4" />
                     </button>
                   )}
                   <button 
@@ -247,6 +260,15 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
                     <DownloadIcon className="w-4 h-4" />
                   </button>
                 </div>
+
+                {isVideo && asset.status === 'ready' && (
+                  <div className="absolute bottom-6 left-6 flex items-center gap-2">
+                    <div className="px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-[9px] font-black text-white border border-white/10 flex items-center gap-1.5">
+                      <ClockIcon className="w-3 h-3 text-indigo-400" />
+                      {asset.duration}S
+                    </div>
+                  </div>
+                )}
 
                 {/* Simplified Action Area */}
                 {asset.status === 'ready' && (
@@ -294,11 +316,18 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
                           </div>
                           
                           <button 
-                              onClick={(e) => { e.stopPropagation(); onPromote(asset); }}
-                              className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center text-white hover:bg-indigo-600 transition-colors shrink-0"
-                              title={isVideo ? "Extend Scene" : "Animate Image"}
+                              onClick={(e) => { e.stopPropagation(); isVideo ? onExtend(asset) : onAddToScene(asset); }}
+                              className={`h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center text-white hover:bg-indigo-600 transition-all shrink-0 ${isVideo ? 'px-4 gap-2' : 'w-12'}`}
+                              title={isVideo ? "Extend +8s" : "Add to Scene"}
                           >
-                              {isVideo ? <SparklesIcon className="w-4 h-4" /> : <FilmIcon className="w-4 h-4" />}
+                              {isVideo ? (
+                                <>
+                                  <SparklesIcon className="w-4 h-4" />
+                                  <span className="text-[10px] font-black uppercase tracking-widest">Extend +8s</span>
+                                </>
+                              ) : (
+                                <PlusIcon className="w-4 h-4" />
+                              )}
                           </button>
                         </div>
                     </div>

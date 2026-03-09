@@ -79,6 +79,7 @@ export interface GenerateParams {
   referenceImages?: ImageFile[];
   inputVideoObject?: Video | null;
   isLooping?: boolean;
+  duration?: number;
   // Image specific
   imageModel?: ImageModel;
   imageSize?: ImageSize;
@@ -98,6 +99,7 @@ export interface StudioAsset {
   timestamp: number;
   model: ImageModel | VeoModel;
   aspectRatio: AspectRatio;
+  duration?: number;
   status?: 'processing' | 'ready' | 'error';
   favorite?: boolean;
 }

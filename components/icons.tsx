@@ -23,6 +23,7 @@ import {
   Zap,
   Globe,
   Heart,
+  Clock,
 } from 'lucide-react';
 
 const defaultProps = {
@@ -31,6 +32,10 @@ const defaultProps = {
 
 export const HeartIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <Heart {...defaultProps} {...props} />
+);
+
+export const ClockIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <Clock {...defaultProps} {...props} />
 );
 
 export const KeyIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (

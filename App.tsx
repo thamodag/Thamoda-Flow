@@ -6,6 +6,7 @@ import PromptForm from './components/PromptForm';
 import GalleryView from './components/GalleryView';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
+import SceneBuilder from './components/SceneBuilder';
 import {generateStudioContent} from './services/geminiService';
 import {getAssets, saveAsset, deleteAsset} from './services/storageService';
 import {
@@ -34,6 +35,14 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [initialFormValues, setInitialFormValues] = useState<GenerateParams | null>(null);
+  const [activeScene, setActiveScene] = useState<{
+    sourceImage: string;
+    prompt: string;
+    aspectRatio: AspectRatio;
+    duration: number;
+    sourceAsset?: StudioAsset;
+  } | null>(null);
+  const [isGeneratingFromScene, setIsGeneratingFromScene] = useState(false);
   const [gridSize, setGridSize] = useState<'small' | 'medium' | 'large'>(() => {
     const saved = localStorage.getItem('gridSize');
     return (saved as 'small' | 'medium' | 'large') || 'medium';
@@ -62,25 +71,31 @@ const App: React.FC = () => {
     checkKey();
   }, []);
 
-  const handleGenerate = useCallback(async (params: GenerateParams) => {
+  const handleGenerate = useCallback(async (params: GenerateParams, targetId?: string) => {
     setErrorMessage(null);
     const qty = params.quantity || 1;
     const timestamp = Date.now();
     
     // Create placeholder assets for immediate feedback
     const placeholders: StudioAsset[] = Array.from({ length: qty }).map((_, i) => ({
-      id: `temp-${timestamp}-${i}`,
+      id: targetId || `temp-${timestamp}-${i}`,
       url: '',
       modality: params.modality,
       prompt: params.prompt,
       timestamp: timestamp,
       model: params.modality === StudioModality.STILLS ? (params.imageModel || ImageModel.GEMINI_3_PRO) : (params.videoModel || VeoModel.VEO_FAST),
       aspectRatio: params.aspectRatio,
+      duration: params.duration,
       status: 'processing'
     }));
 
-    // Add placeholders to the top of the gallery
-    setAssets(prev => [...placeholders, ...prev]);
+    // Add placeholders to the top of the gallery, or update existing if targetId provided
+    setAssets(prev => {
+      if (targetId) {
+        return prev.map(a => a.id === targetId ? placeholders[0] : a);
+      }
+      return [...placeholders, ...prev];
+    });
 
     // Trigger generation
     try {
@@ -90,14 +105,15 @@ const App: React.FC = () => {
       setAssets(prev => {
         const updated = [...prev];
         newAssets.forEach((asset, i) => {
-          const placeholderIndex = updated.findIndex(a => a.id === `temp-${timestamp}-${i}`);
+          const searchId = targetId || `temp-${timestamp}-${i}`;
+          const placeholderIndex = updated.findIndex(a => a.id === searchId);
           if (placeholderIndex !== -1) {
-            updated[placeholderIndex] = { ...asset, status: 'ready' };
+            updated[placeholderIndex] = { ...asset, id: searchId, status: 'ready' };
           } else {
             // Fallback if placeholder not found
             updated.unshift({ ...asset, status: 'ready' });
           }
-          saveAsset(asset);
+          saveAsset({ ...asset, id: searchId });
         });
         // Remove any remaining placeholders for this batch if generation returned fewer than expected
         return updated.filter(a => !a.id.startsWith(`temp-${timestamp}-`) || a.status === 'ready');
@@ -123,35 +139,67 @@ const App: React.FC = () => {
   };
 
   const handlePromoteToVideo = async (asset: StudioAsset) => {
-    if (asset.modality === StudioModality.STILLS) {
-      setAppState(AppState.LOADING); // Visual cue during conversion
-      try {
-        const response = await fetch(asset.url);
-        const blob = await response.blob();
-        const file = new File([blob], 'selected_frame.png', { type: blob.type });
-        const reader = new FileReader();
+    handleAddToScene(asset);
+  };
+
+  const handleAddToScene = (asset: StudioAsset) => {
+    setActiveScene({
+      sourceImage: asset.url,
+      prompt: asset.prompt,
+      aspectRatio: asset.aspectRatio,
+      duration: 8,
+      sourceAsset: asset
+    });
+  };
+
+  const handleGenerateFromScene = async (prompt: string) => {
+    if (!activeScene || !activeScene.sourceAsset) return;
+    
+    const asset = activeScene.sourceAsset;
+    setIsGeneratingFromScene(true);
+
+    try {
+      const response = await fetch(asset.url);
+      const blob = await response.blob();
+      const file = new File([blob], 'scene_start.png', { type: blob.type });
+      const reader = new FileReader();
+      
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const imageFile: ImageFile = { file, base64, url: asset.url };
         
-        reader.onloadend = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          const imageFile: ImageFile = { file, base64, url: asset.url };
-          
-          setModality(StudioModality.MOTION);
-          setInitialFormValues({
-            modality: StudioModality.MOTION,
-            prompt: '',
-            mode: GenerationMode.FRAMES_TO_VIDEO,
-            startFrame: imageFile,
-            aspectRatio: asset.aspectRatio || AspectRatio.PORTRAIT,
-            resolution: Resolution.P720,
-          });
-          setAppState(AppState.IDLE);
-        };
-        reader.readAsDataURL(blob);
-      } catch (err) {
-        setErrorMessage("Failed to process image for video.");
-        setAppState(AppState.ERROR);
-      }
+        setActiveScene(null);
+        setIsGeneratingFromScene(false);
+        
+        await handleGenerate({
+          modality: StudioModality.MOTION,
+          prompt: prompt,
+          mode: GenerationMode.FRAMES_TO_VIDEO,
+          startFrame: imageFile,
+          aspectRatio: asset.aspectRatio,
+          resolution: Resolution.P720,
+          duration: 8
+        });
+      };
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      setErrorMessage("Failed to process scene image.");
+      setIsGeneratingFromScene(false);
     }
+  };
+
+  const handleExtendVideo = async (asset: StudioAsset) => {
+    if (asset.modality !== StudioModality.MOTION || !asset.videoObject) return;
+
+    await handleGenerate({
+      modality: StudioModality.MOTION,
+      prompt: asset.prompt,
+      mode: GenerationMode.EXTEND_VIDEO,
+      inputVideoObject: asset.videoObject,
+      aspectRatio: asset.aspectRatio,
+      resolution: Resolution.P720,
+      duration: (asset.duration || 8) + 8
+    }, asset.id); // Pass asset.id to update the existing one
   };
 
   const handleNew = () => {
@@ -271,6 +319,8 @@ const App: React.FC = () => {
                <GalleryView 
                  assets={currentModalityAssets} 
                  onPromote={handlePromoteToVideo}
+                 onAddToScene={handleAddToScene}
+                 onExtend={handleExtendVideo}
                  onDelete={handleDeleteAsset}
                  onReusePrompt={handleReusePrompt}
                  onFavorite={handleToggleFavorite}
@@ -297,6 +347,13 @@ const App: React.FC = () => {
             />
          </div>
       </div>
+
+      <SceneBuilder 
+        scene={activeScene}
+        onClose={() => setActiveScene(null)}
+        onGenerate={handleGenerateFromScene}
+        isGenerating={isGeneratingFromScene}
+      />
     </div>
   );
 };

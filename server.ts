@@ -44,13 +44,13 @@ async function startServer() {
 
     if (password === pass1) {
       console.log(`[Auth] Login successful for user1`);
-      res.json({ success: true, userType: 'user1' });
+      res.json({ user: 'user1' });
     } else if (password === pass2) {
       console.log(`[Auth] Login successful for user2`);
-      res.json({ success: true, userType: 'user2' });
+      res.json({ user: 'user2' });
     } else {
       console.log(`[Auth] Login failed: Incorrect password`);
-      res.status(401).json({ success: false, message: "Incorrect password" });
+      res.status(401).json({ error: 'Invalid password' });
     }
   });
 

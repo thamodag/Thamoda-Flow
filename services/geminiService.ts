@@ -170,6 +170,7 @@ export const generateStudioContent = async (
           timestamp: Date.now(),
           model: params.videoModel || VeoModel.VEO_FAST,
           aspectRatio: params.aspectRatio,
+          duration: params.duration || 8,
         };
       }
       return null;
