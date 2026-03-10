@@ -21,11 +21,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const userType = req.headers['x-user-type'] as string;
   
-  let apiKey: string | undefined;
-  if (userType === 'user1') {
-    apiKey = process.env.API_KEY_USER1;
-  } else if (userType === 'user2') {
-    apiKey = process.env.API_KEY_USER2;
+  let apiKey: string | undefined = process.env.API_KEY;
+  
+  if (!apiKey) {
+    if (userType === 'user1') {
+      apiKey = process.env.API_KEY_USER1;
+    } else if (userType === 'user2') {
+      apiKey = process.env.API_KEY_USER2;
+    }
   }
 
   if (!apiKey) {
@@ -33,9 +36,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const operation = await ai.operations.getVideosOperation(req.body);
-    return res.status(200).json(operation);
+    const opData = req.body.operation;
+    if (!opData || !opData.name) {
+      return res.status(400).json({ error: "Invalid operation data" });
+    }
+
+    // Use direct fetch to avoid SDK's requirement for live Operation instances
+    // which are lost during JSON serialization between client and proxy.
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${opData.name}`, {
+      method: 'GET',
+      headers: {
+        'x-goog-api-key': apiKey,
+      },
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || `API request failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return res.status(200).json(data);
   } catch (error: any) {
     console.error(`[Proxy] getVideosOperation error:`, error);
     return res.status(500).json({ error: error.message || "Internal Server Error" });

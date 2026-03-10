@@ -4,7 +4,6 @@ import {
   AspectRatio,
   GenerateParams,
   GenerationMode,
-  ImageFile,
   Resolution,
   VeoModel,
   ImageModel,
@@ -14,7 +13,6 @@ import {
 import {
   ArrowRightIcon,
   FilmIcon,
-  PlusIcon,
   XMarkIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
@@ -29,25 +27,22 @@ interface PromptFormProps {
 const PromptForm: React.FC<PromptFormProps> = ({modality, onGenerate, initialValues}) => {
   const [prompt, setPrompt] = useState(initialValues?.prompt ?? '');
   const [quantity, setQuantity] = useState(initialValues?.quantity ?? 1);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(initialValues?.mode === GenerationMode.FRAMES_TO_VIDEO);
-  const [startFrame, setStartFrame] = useState<ImageFile | null>(initialValues?.startFrame ?? null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   const [imageModel, setImageModel] = useState<ImageModel>(initialValues?.imageModel ?? ImageModel.GEMINI_3_1_FLASH);
   const [imageSize, setImageSize] = useState<ImageSize>(initialValues?.imageSize ?? ImageSize.I1K);
   const [videoModel, setVideoModel] = useState<VeoModel>(initialValues?.videoModel ?? VeoModel.VEO_FAST);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>(initialValues?.aspectRatio ?? AspectRatio.PORTRAIT);
   const [resolution, setResolution] = useState<Resolution>(initialValues?.resolution ?? Resolution.P720);
+  const [duration, setDuration] = useState<number>(initialValues?.duration ?? 8);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isVideo = modality === StudioModality.MOTION;
 
   useEffect(() => {
     if (initialValues) {
       setPrompt(initialValues.prompt || '');
-      setStartFrame(initialValues.startFrame || null);
-      if (initialValues.mode === GenerationMode.FRAMES_TO_VIDEO) {
-        setIsSettingsOpen(true);
-      }
       // Focus the textarea
       setTimeout(() => {
         if (textareaRef.current) {
@@ -65,24 +60,6 @@ const PromptForm: React.FC<PromptFormProps> = ({modality, onGenerate, initialVal
     }
   }, [prompt]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = (reader.result as string).split(',')[1];
-        if (base64) {
-          setStartFrame({
-            file,
-            base64,
-            url: URL.createObjectURL(file)
-          });
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onGenerate({
@@ -93,15 +70,12 @@ const PromptForm: React.FC<PromptFormProps> = ({modality, onGenerate, initialVal
       videoModel,
       imageModel: imageModel,
       imageSize: imageSize,
-      mode: startFrame ? GenerationMode.FRAMES_TO_VIDEO : (isVideo ? GenerationMode.TEXT_TO_VIDEO : undefined),
-      startFrame,
+      mode: isVideo ? GenerationMode.TEXT_TO_VIDEO : undefined,
       resolution,
+      duration: isVideo ? duration : undefined,
     });
     setPrompt('');
-    setStartFrame(null);
   };
-
-  const isVideo = modality === StudioModality.MOTION;
 
   return (
     <div className="relative w-full group">
@@ -117,12 +91,7 @@ const PromptForm: React.FC<PromptFormProps> = ({modality, onGenerate, initialVal
                 ? 'bg-indigo-600 text-white border border-indigo-400/20 shadow-lg shadow-indigo-600/10' 
                 : 'bg-orange-500 text-white shadow-lg shadow-orange-500/10'
             }`}>
-              {isVideo ? (startFrame ? 'Frames to Video' : 'Text to Video') : 'Create Image'}
-              {startFrame && (
-                <button onClick={() => setStartFrame(null)} className="hover:text-white/70 transition-colors">
-                  <XMarkIcon className="w-3.5 h-3.5 ml-1" />
-                </button>
-              )}
+              {isVideo ? 'Text to Video' : 'Create Image'}
             </div>
             
             <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
@@ -224,40 +193,35 @@ const PromptForm: React.FC<PromptFormProps> = ({modality, onGenerate, initialVal
                         </select>
                     </div>
                 )}
+
+                {isVideo && (
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Duration</label>
+                        <div className="flex bg-black/40 rounded-xl p-1 border border-white/10">
+                            {[8, 16, 24].map((d) => (
+                                <button
+                                    key={d}
+                                    type="button"
+                                    onClick={() => setDuration(d)}
+                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${duration === d ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                                >
+                                    {d}s
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
         {/* Input Area */}
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 flex items-end gap-5">
-          <div className="relative shrink-0">
-             <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="image/*" />
-             <button 
-                type="button" 
-                onClick={() => fileInputRef.current?.click()}
-                className={`w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all overflow-hidden border border-white/5 group-hover:border-white/20`}
-             >
-                {startFrame ? (
-                  <img src={startFrame.url} className="w-full h-full object-cover" alt="Start Frame" />
-                ) : (
-                  <PlusIcon className="w-7 h-7 text-gray-500" />
-                )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <SparklesIcon className="w-5 h-5 text-white" />
-                </div>
-             </button>
-             {startFrame && (
-               <button type="button" onClick={(e) => { e.stopPropagation(); setStartFrame(null); }} className="absolute -top-1.5 -right-1.5 bg-black text-white p-1 rounded-full border border-white/20 hover:bg-red-500 transition-colors z-10" >
-                 <XMarkIcon className="w-3 h-3" />
-               </button>
-             )}
-          </div>
-          
           <div className="flex-grow pb-2">
             <textarea
               ref={textareaRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={isVideo ? (startFrame ? "Describe the motion sequence..." : "Describe a cinematic video...") : "Generate an image from text and ingredients..."}
+              placeholder={isVideo ? "Describe a cinematic video..." : "Generate an image from text and ingredients..."}
               className="w-full bg-transparent text-base text-white placeholder-gray-600 focus:outline-none resize-none min-h-[28px] font-medium leading-relaxed tracking-tight"
               rows={1}
             />
@@ -265,9 +229,9 @@ const PromptForm: React.FC<PromptFormProps> = ({modality, onGenerate, initialVal
 
           <button
             type="submit"
-            disabled={!prompt.trim() && !startFrame}
+            disabled={!prompt.trim()}
             className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all active:scale-95 shrink-0 shadow-lg group/btn ${
-                prompt.trim() || startFrame
+                prompt.trim()
                 ? (isVideo ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-white text-black hover:bg-orange-500 hover:text-white') 
                 : 'bg-white/5 text-gray-700 cursor-not-allowed'
             }`}

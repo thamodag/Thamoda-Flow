@@ -1,27 +1,41 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { StudioAsset, StudioModality, ImageSize, ImageModel, StudioModality as Modality, GenerateParams, AspectRatio } from '../types';
+import { StudioAsset, StudioModality, ImageSize, ImageModel, StudioModality as Modality, GenerateParams, AspectRatio, VeoModel } from '../types';
 import { DownloadIcon, FilmIcon, PlusIcon, SparklesIcon, XMarkIcon, ChevronDownIcon, ArrowPathIcon, RectangleStackIcon, HeartIcon } from './icons';
 import { generateStudioContent } from '../services/geminiService';
+import AnimateModal from './AnimateModal';
 
 interface GalleryViewProps {
   assets: StudioAsset[];
-  onPromote: (asset: StudioAsset) => void;
+  onExtend?: (asset: StudioAsset) => void;
   onDelete?: (id: string) => void;
   onReusePrompt: (prompt: string) => void;
   onFavorite: (id: string) => void;
   onNew: () => void;
+  onAnimate?: (asset: StudioAsset, prompt: string, duration: number, model: VeoModel) => void;
+  isGeneratingVideo?: boolean;
   gridSize?: 'small' | 'medium' | 'large';
 }
 
-const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, onReusePrompt, onFavorite, onNew, gridSize = 'medium' }) => {
+const GalleryView: React.FC<GalleryViewProps> = ({ 
+  assets, 
+  onExtend,
+  onDelete, 
+  onReusePrompt, 
+  onFavorite, 
+  onNew, 
+  onAnimate,
+  isGeneratingVideo = false,
+  gridSize = 'medium' 
+}) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [downloadDropdownId, setDownloadDropdownId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<StudioAsset | null>(null);
+  const [animatingAsset, setAnimatingAsset] = useState<StudioAsset | null>(null);
 
   const triggerDownload = (url: string, filename: string) => {
     const link = document.createElement('a');
@@ -233,7 +247,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
                   </button>
                   {!isVideo && (
                     <button 
-                      onClick={(e) => { e.stopPropagation(); onPromote(asset); }}
+                      onClick={(e) => { e.stopPropagation(); setAnimatingAsset(asset); }}
                       className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-indigo-500 transition-all opacity-0 group-hover:opacity-100 duration-300 translate-x-4 group-hover:translate-x-0 delay-[150ms]"
                       title="Animate"
                     >
@@ -319,7 +333,14 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
                               </div>
                               
                               <button 
-                                  onClick={(e) => { e.stopPropagation(); onPromote(asset); }}
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if (isVideo) {
+                                      onExtend?.(asset);
+                                    } else {
+                                      setAnimatingAsset(asset);
+                                    }
+                                  }}
                                   className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center text-white hover:bg-indigo-600 transition-colors shrink-0"
                                   title={isVideo ? "Extend Scene" : "Animate Image"}
                               >
@@ -400,6 +421,19 @@ const GalleryView: React.FC<GalleryViewProps> = ({ assets, onPromote, onDelete, 
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimateModal 
+        asset={animatingAsset}
+        isOpen={!!animatingAsset}
+        onClose={() => setAnimatingAsset(null)}
+        isGenerating={isGeneratingVideo}
+        onGenerate={(prompt, duration, model) => {
+          if (animatingAsset && onAnimate) {
+            onAnimate(animatingAsset, prompt, duration, model);
+            setAnimatingAsset(null);
+          }
+        }}
+      />
     </div>
   );
 };

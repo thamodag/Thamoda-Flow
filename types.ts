@@ -75,6 +75,7 @@ export interface GenerateParams {
   videoModel?: VeoModel;
   mode?: GenerationMode;
   startFrame?: ImageFile | null;
+  sourceImage?: string;
   endFrame?: ImageFile | null;
   referenceImages?: ImageFile[];
   inputVideoObject?: Video | null;

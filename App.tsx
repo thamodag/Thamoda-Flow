@@ -6,7 +6,6 @@ import PromptForm from './components/PromptForm';
 import GalleryView from './components/GalleryView';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
-import SceneBuilder from './components/SceneBuilder';
 import {generateStudioContent} from './services/geminiService';
 import {getAssets, saveAsset, deleteAsset} from './services/storageService';
 import {
@@ -35,14 +34,7 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [initialFormValues, setInitialFormValues] = useState<GenerateParams | null>(null);
-  const [activeScene, setActiveScene] = useState<{
-    sourceImage: string;
-    prompt: string;
-    aspectRatio: AspectRatio;
-    duration: number;
-    sourceAsset?: StudioAsset;
-  } | null>(null);
-  const [isGeneratingFromScene, setIsGeneratingFromScene] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [gridSize, setGridSize] = useState<'small' | 'medium' | 'large'>(() => {
     const saved = localStorage.getItem('gridSize');
     return (saved as 'small' | 'medium' | 'large') || 'medium';
@@ -122,7 +114,13 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Generation failed:', error);
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      setErrorMessage(msg);
+      
+      if (msg.includes('429') || msg.toLowerCase().includes('quota')) {
+        setErrorMessage("Your API key has exceeded its quota. Please select a new API key with sufficient credits.");
+        setShowApiKeyDialog(true);
+      } else {
+        setErrorMessage(msg);
+      }
       
       // Update placeholders to error state
       setAssets(prev => prev.map(a => 
@@ -138,53 +136,38 @@ const App: React.FC = () => {
     setAssets(prev => prev.filter(a => a.id !== id));
   };
 
-  const handlePromoteToVideo = async (asset: StudioAsset) => {
-    handleAddToScene(asset);
-  };
-
-  const handleAddToScene = (asset: StudioAsset) => {
-    setActiveScene({
-      sourceImage: asset.url,
-      prompt: asset.prompt,
-      aspectRatio: asset.aspectRatio,
-      duration: 8,
-      sourceAsset: asset
-    });
-  };
-
-  const handleGenerateFromScene = async (prompt: string) => {
-    if (!activeScene || !activeScene.sourceAsset) return;
-    
-    const asset = activeScene.sourceAsset;
-    setIsGeneratingFromScene(true);
+  const handleAnimateImage = async (asset: StudioAsset, prompt: string, duration: number, model: VeoModel) => {
+    setIsGeneratingVideo(true);
+    setModality(StudioModality.MOTION);
 
     try {
-      const response = await fetch(asset.url);
-      const blob = await response.blob();
-      const file = new File([blob], 'scene_start.png', { type: blob.type });
-      const reader = new FileReader();
+      let sourceImage = asset.url;
       
-      reader.onloadend = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        const imageFile: ImageFile = { file, base64, url: asset.url };
-        
-        setActiveScene(null);
-        setIsGeneratingFromScene(false);
-        
-        await handleGenerate({
-          modality: StudioModality.MOTION,
-          prompt: prompt,
-          mode: GenerationMode.FRAMES_TO_VIDEO,
-          startFrame: imageFile,
-          aspectRatio: asset.aspectRatio,
-          resolution: Resolution.P720,
-          duration: 8
+      // If it's a blob URL, convert to base64 so the proxy can handle it
+      if (asset.blob) {
+        sourceImage = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(asset.blob!);
         });
-      };
-      reader.readAsDataURL(blob);
+      }
+
+      await handleGenerate({
+        modality: StudioModality.MOTION,
+        prompt: prompt,
+        mode: GenerationMode.FRAMES_TO_VIDEO,
+        sourceImage: sourceImage,
+        aspectRatio: asset.aspectRatio,
+        resolution: Resolution.P720,
+        duration: duration,
+        videoModel: model
+      });
     } catch (err) {
-      setErrorMessage("Failed to process scene image.");
-      setIsGeneratingFromScene(false);
+      console.error("Animation failed:", err);
+      setErrorMessage("Failed to generate video from image.");
+    } finally {
+      setIsGeneratingVideo(false);
     }
   };
 
@@ -318,8 +301,8 @@ const App: React.FC = () => {
             {currentModalityAssets.length > 0 ? (
                <GalleryView 
                  assets={currentModalityAssets} 
-                 onPromote={handlePromoteToVideo}
-                 onAddToScene={handleAddToScene}
+                 onAnimate={handleAnimateImage}
+                 isGeneratingVideo={isGeneratingVideo}
                  onExtend={handleExtendVideo}
                  onDelete={handleDeleteAsset}
                  onReusePrompt={handleReusePrompt}
@@ -347,13 +330,6 @@ const App: React.FC = () => {
             />
          </div>
       </div>
-
-      <SceneBuilder 
-        scene={activeScene}
-        onClose={() => setActiveScene(null)}
-        onGenerate={handleGenerateFromScene}
-        isGenerating={isGeneratingFromScene}
-      />
     </div>
   );
 };

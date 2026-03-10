@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { VideoGenerationReferenceType } from '@google/genai';
-import {GenerateParams, GenerationMode, StudioModality, ImageModel, VeoModel, StudioAsset, ImageSize} from '../types';
+import {GenerateParams, GenerationMode, StudioModality, ImageModel, VeoModel, StudioAsset, ImageSize, Resolution} from '../types';
 
 const base64ToBlob = (base64: string, mimeType: string) => {
   const byteCharacters = atob(base64);
@@ -124,59 +124,79 @@ export const generateStudioContent = async (
 
   } else {
     const qty = params.quantity || 1;
-    const promises = Array.from({ length: qty }).map(async () => {
-      const config: any = { numberOfVideos: 1, resolution: params.resolution };
-      if (params.mode !== GenerationMode.EXTEND_VIDEO) config.aspectRatio = params.aspectRatio;
-
-      const payload: any = {
-        model: params.videoModel || VeoModel.VEO_FAST,
-        config: config,
-        prompt: params.prompt,
-      };
-
-      if (params.mode === GenerationMode.FRAMES_TO_VIDEO && params.startFrame) {
-        payload.image = { imageBytes: params.startFrame.base64, mimeType: params.startFrame.file.type };
-        const finalEndFrame = params.isLooping ? params.startFrame : params.endFrame;
-        if (finalEndFrame) payload.config.lastFrame = { imageBytes: finalEndFrame.base64, mimeType: finalEndFrame.file.type };
-      } else if (params.mode === GenerationMode.REFERENCES_TO_VIDEO) {
-        const refs: any[] = (params.referenceImages || []).map(img => ({
-          image: { imageBytes: img.base64, mimeType: img.file.type },
-          referenceType: VideoGenerationReferenceType.ASSET,
-        }));
-        if (refs.length > 0) payload.config.referenceImages = refs;
-      } else if (params.mode === GenerationMode.EXTEND_VIDEO && params.inputVideoObject) {
-        payload.video = params.inputVideoObject;
-      }
-
-      let operation = await callProxy('generateVideos', payload);
-      while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        operation = await callProxy('getVideosOperation', { operation: operation });
-      }
-
-      if (operation?.response?.generatedVideos?.[0]?.video) {
-        const videoObject = operation.response.generatedVideos[0].video;
-        const userType = localStorage.getItem('userType');
-        const downloadUrl = `/api/proxy/fetchVideo?uri=${encodeURIComponent(videoObject.uri)}&userType=${userType}`;
-        const res = await fetch(downloadUrl);
-        const blob = await res.blob();
-        return {
-          id: Math.random().toString(36).substr(2, 9),
-          url: URL.createObjectURL(blob),
-          blob,
-          videoObject,
-          modality: StudioModality.MOTION,
-          prompt: params.prompt,
-          timestamp: Date.now(),
-          model: params.videoModel || VeoModel.VEO_FAST,
-          aspectRatio: params.aspectRatio,
-          duration: params.duration || 8,
+    const results: (StudioAsset | null)[] = [];
+    
+    for (let i = 0; i < qty; i++) {
+      try {
+        const config: any = { 
+          numberOfVideos: 1, 
+          resolution: params.resolution || Resolution.P720,
+          duration: params.duration
         };
-      }
-      return null;
-    });
+        if (params.mode !== GenerationMode.EXTEND_VIDEO) config.aspectRatio = params.aspectRatio;
 
-    const results = await Promise.all(promises.map(p => p.catch(e => null)));
+        const payload: any = {
+          model: params.videoModel || VeoModel.VEO_FAST,
+          config: config,
+          prompt: params.prompt,
+        };
+
+        if (params.mode === GenerationMode.FRAMES_TO_VIDEO) {
+          if (params.sourceImage) {
+            payload.sourceImage = params.sourceImage;
+          } else if (params.startFrame) {
+            payload.image = { imageBytes: params.startFrame.base64, mimeType: params.startFrame.file.type };
+          }
+          
+          const finalEndFrame = params.isLooping ? params.startFrame : params.endFrame;
+          if (finalEndFrame) payload.config.lastFrame = { imageBytes: finalEndFrame.base64, mimeType: finalEndFrame.file.type };
+        } else if (params.mode === GenerationMode.REFERENCES_TO_VIDEO) {
+          const refs: any[] = (params.referenceImages || []).map(img => ({
+            image: { imageBytes: img.base64, mimeType: img.file.type },
+            referenceType: VideoGenerationReferenceType.ASSET,
+          }));
+          if (refs.length > 0) payload.config.referenceImages = refs;
+        } else if (params.mode === GenerationMode.EXTEND_VIDEO && params.inputVideoObject) {
+          payload.video = params.inputVideoObject;
+        }
+
+        let operation = await callProxy('generateVideos', payload);
+        while (!operation.done) {
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          operation = await callProxy('getVideosOperation', { operation: operation });
+        }
+
+        if (operation?.response?.generatedVideos?.[0]?.video) {
+          const videoObject = operation.response.generatedVideos[0].video;
+          const userType = localStorage.getItem('userType');
+          const downloadUrl = `/api/proxy/fetchVideo?uri=${encodeURIComponent(videoObject.uri)}&userType=${userType}`;
+          const res = await fetch(downloadUrl);
+          const blob = await res.blob();
+          results.push({
+            id: Math.random().toString(36).substr(2, 9),
+            url: URL.createObjectURL(blob),
+            blob,
+            videoObject,
+            modality: StudioModality.MOTION,
+            prompt: params.prompt,
+            timestamp: Date.now(),
+            model: params.videoModel || VeoModel.VEO_FAST,
+            aspectRatio: params.aspectRatio,
+            duration: params.duration || 8,
+          });
+        } else {
+          results.push(null);
+        }
+      } catch (e: any) {
+        console.error(`Video generation ${i+1} failed:`, e);
+        // If we hit a quota error, stop trying for the rest of the batch
+        if (e.message?.includes('429') || e.message?.toLowerCase().includes('quota')) {
+          throw e; // Re-throw to be handled by App.tsx
+        }
+        results.push(null);
+      }
+    }
+
     return results.filter(r => r !== null) as StudioAsset[];
   }
 };

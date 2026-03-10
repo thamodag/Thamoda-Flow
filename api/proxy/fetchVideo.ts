@@ -21,11 +21,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userType = req.query.userType as string;
   const videoUri = req.query.uri as string;
   
-  let apiKey: string | undefined;
-  if (userType === 'user1') {
-    apiKey = process.env.API_KEY_USER1;
-  } else if (userType === 'user2') {
-    apiKey = process.env.API_KEY_USER2;
+  let apiKey: string | undefined = process.env.API_KEY;
+  
+  if (!apiKey) {
+    if (userType === 'user1') {
+      apiKey = process.env.API_KEY_USER1;
+    } else if (userType === 'user2') {
+      apiKey = process.env.API_KEY_USER2;
+    }
   }
 
   if (!apiKey) {
@@ -37,7 +40,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const response = await fetch(`${videoUri}&key=${apiKey}`);
+    const response = await fetch(videoUri, {
+      method: 'GET',
+      headers: {
+        'x-goog-api-key': apiKey,
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch video: ${response.statusText}`);
+    }
+    
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
